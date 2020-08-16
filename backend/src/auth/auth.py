@@ -1,5 +1,5 @@
 import json
-from flask import request, _request_ctx_stack
+from flask import request, _request_ctx_stack, abort
 from functools import wraps
 from jose import jwt
 from urllib.request import urlopen
@@ -34,7 +34,20 @@ class AuthError(Exception):
 
 
 def get_token_auth_header():
-    raise Exception('Not Implemented')
+    auth_headers = request.headers.get('Authentication', None)
+    if not auth_headers:
+        raise AuthError({
+            "code": "authorization_header_missing",
+            "description": "Authorization header is missing"
+        }, 401)
+    header_parts = auth_headers.split()
+    if len(header_parts) != 2 or header_parts[0] != 'Bearer':
+        raise AuthError({
+            "code": "Authorization header is malformed. It should be of format Bearer<space>token",
+            "description": "Authorization header must be a valid Bearer header"
+        }, 401)
+    token = header_parts[1]
+    return token
 
 
 '''
@@ -51,7 +64,11 @@ def get_token_auth_header():
 
 
 def check_permissions(permission, payload):
-    raise Exception('Not Implemented')
+    if 'permissions' not in payload:
+        abort(400)
+    if permission not in payload['permissions']:
+        abort(403)
+    return True
 
 
 '''
@@ -70,7 +87,57 @@ def check_permissions(permission, payload):
 
 
 def verify_decode_jwt(token):
-    raise Exception('Not Implemented')
+    # verify Auth0 token has kid
+    unverified_header = jwt.get_unverified_header(token)
+    if 'kid' not in unverified_header:
+        raise AuthError({
+            "code": "invalid_header",
+            "description": "Authorization malformed"
+        }, 401)
+
+    # extract correct key
+    jwks_stream = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/.jwks.json')
+    jwks = json.loads(jwks_stream.read())
+    selected_kids = [jwk for jwk in jwks if jwk['kid'] == unverified_header['kid']]
+    if not selected_kids:
+        raise AuthError({
+            "code": "invalid_header",
+            "description": "Unable to find the appropriate key"
+        }, 400)
+    key = selected_kids[0]
+
+    # use key to decode the token
+    rsa_key = {
+        'kty': key['kty'],
+        'kid': key['kid'],
+        'use': key['use'],
+        'n': key['n'],
+        'e': key['e']
+    }
+    try:
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=ALGORITHMS,
+            audience=API_AUDIENCE,
+            issuer=f'https://{AUTH0_DOMAIN}/'
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise AuthError({
+            'code': 'token_expired',
+            'description': 'Token expired.'
+        }, 401)
+    except jwt.JWTClaimsError:
+        raise AuthError({
+            'code': 'invalid_claims',
+            'description': 'Incorrect claims. Please, check the audience and issuer.'
+        }, 401)
+    except Exception:
+        raise AuthError({
+            'code': 'invalid_header',
+            'description': 'Unable to parse authentication token.'
+        }, 400)
 
 
 '''
