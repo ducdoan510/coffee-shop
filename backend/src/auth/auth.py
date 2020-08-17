@@ -65,7 +65,7 @@ def check_permissions(permission, payload):
     if 'permissions' not in payload:
         abort(400)
     if permission not in payload['permissions']:
-        abort(403)
+        abort(401)
     return True
 
 
@@ -100,7 +100,7 @@ def verify_decode_jwt(token):
         raise AuthError({
             "code": "invalid_header",
             "description": "Unable to find the appropriate key"
-        }, 400)
+        }, 401)
     key = selected_kids[0]
 
     # use key to decode the token

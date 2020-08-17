@@ -98,8 +98,10 @@ def edit_drink(payload, id):
     if drink is None:
         abort(404)
     drink_json = request.get_json()
-    drink.title = drink_json['title']
-    drink.recipe = json.dumps(drink_json['recipe'])
+    if 'title' in drink_json:
+        drink.title = drink_json['title']
+    if 'recipe' in drink_json:
+        drink.recipe = json.dumps(drink_json['recipe'])
     drink.update()
     return jsonify({
         'success': True,
