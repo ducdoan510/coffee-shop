@@ -34,7 +34,7 @@ class AuthError(Exception):
 
 
 def get_token_auth_header():
-    auth_headers = request.headers.get('Authentication', None)
+    auth_headers = request.headers.get('Authorization', None)
     if not auth_headers:
         raise AuthError({
             "code": "authorization_header_missing",
@@ -96,9 +96,9 @@ def verify_decode_jwt(token):
         }, 401)
 
     # extract correct key
-    jwks_stream = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/.jwks.json')
+    jwks_stream = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
     jwks = json.loads(jwks_stream.read())
-    selected_kids = [jwk for jwk in jwks if jwk['kid'] == unverified_header['kid']]
+    selected_kids = [jwk for jwk in jwks.get('keys', []) if jwk['kid'] == unverified_header['kid']]
     if not selected_kids:
         raise AuthError({
             "code": "invalid_header",
