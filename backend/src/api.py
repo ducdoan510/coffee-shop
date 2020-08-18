@@ -4,7 +4,7 @@ from sqlalchemy import exc
 import json
 from flask_cors import CORS
 
-from .database.models import db_drop_and_create_all, setup_db, Drink
+from .database.models import db_drop_and_create_all, setup_db, Drink, db
 from .auth.auth import AuthError, requires_auth
 
 app = Flask(__name__)
@@ -72,8 +72,15 @@ def drink_details(payload):
 @requires_auth('post:drinks')
 def create_drink(payload):
     drink_json = request.get_json()
-    drink = Drink(title=drink_json['title'], recipe=json.dumps(drink_json['recipe']))
-    drink.insert()
+    try:
+        drink = Drink(title=drink_json['title'], recipe=json.dumps(drink_json['recipe']))
+        drink.insert()
+    except:
+        db.session.rollback()
+        return json.dumps({
+            'success': False,
+            'error': 'Issue creating new drink'
+        }), 500
     return jsonify({
         "success": True,
         "drinks": [drink.long()]
@@ -96,13 +103,23 @@ def create_drink(payload):
 def edit_drink(payload, id):
     drink = Drink.query.get(id)
     if drink is None:
-        abort(404)
+        return json.dumps({
+            'success': False,
+            'error': f'Drink #{id} not found'
+        }), 404
     drink_json = request.get_json()
-    if 'title' in drink_json:
-        drink.title = drink_json['title']
-    if 'recipe' in drink_json:
-        drink.recipe = json.dumps(drink_json['recipe'])
-    drink.update()
+    try:
+        if 'title' in drink_json:
+            drink.title = drink_json['title']
+        if 'recipe' in drink_json:
+            drink.recipe = json.dumps(drink_json['recipe'])
+        drink.update()
+    except:
+        db.session.rollback()
+        return json.dumps({
+            'success': False,
+            'error': f'Issue editing drink #{id}'
+        }), 500
     return jsonify({
         'success': True,
         'drinks': [drink.long()]
